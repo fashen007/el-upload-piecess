@@ -19,93 +19,97 @@ export const uploadByPieces = ({files, chunkUrl, fileUrl, pieceSize = 5, progres
   let fileList = [] // 总文件列表
   let progressNum = 1 // 进度
   let successAllCount = 0 // 上传成功的片数
-  let currentAllChunk = 0 // 当前上传的片数索引
+  // let currentAllChunk = 0 // 当前上传的片数索引
   let AllChunk = 0 // 所有文件的chunk数之和
+  let AllFileSize = 0 // 所有文件size
   // 获取md5
   const readFileMD5 = (files) => {
     // 读取每个文件的md5
-    files.map((index, file) => {
+    files.map((file, index) => {
       let fileRederInstance = new FileReader()
       fileRederInstance.readAsBinaryString(file)
       fileRederInstance.addEventListener('load', e => {
         let fileBolb = e.target.result
         let fileMD5 = md5(fileBolb)
-        if (!fileList.some((arr) => arr.md5 === fileMD5)) fileList.push({ md5: fileMD5, name: file.name, file})
-        if (index === files.length) readChunkMD5(fileList)
+        if (!fileList.some((arr) => arr.md5 === fileMD5)) {
+          fileList.push({md5: fileMD5, name: file.name, file})
+          AllFileSize = AllFileSize + file.size
+        }
+        if (index === files.length - 1) readChunkMD5(fileList)
       }, false)
     })
   }
-  const getChunkInfo = () => {
-    let start = currentALLChunk * chunkSize
-    let end = Math.min(size, start + chunkSize)
+  const getChunkInfo = (file, currentChunk, chunkSize) => {
+    let start = currentChunk * chunkSize
+    let end = Math.min(file.size, start + chunkSize)
     let chunk = file.slice(start, end)
     return { start, end, chunk }
   }
   // 针对每个文件进行chunk处理
   const readChunkMD5 = (fileList) => {
-    fileList.map((currentFile) => {
-      const { name, size } = currentFile.file
+    fileList.map((currentFile, fileIndex) => {
       const chunkSize = pieceSize * 1024 * 1024 // 5MB一片
-      const chunkCount = Math.ceil(size / chunkSize) // 总片数
+      const chunkCount = Math.ceil(currentFile.file.size / chunkSize) // 总片数
       AllChunk = AllChunk + chunkCount // 计算全局chunk数
-      let fileSize = size // 文件大小
-      let currentChunk = 0 // 当前正在上传的分片
-      const { chunk } = getChunkInfo()
-      let chunkFR = new FileReader()
-      chunkFR.readAsBinaryString(chunk)
-      chunkFR.addEventListener('load', e => {
-        let chunkBolb = e.target.result
-        let chunkMD5 = md5(chunkBolb)
-        this.readingFile = false
-        uploadChunk(chunkMD5)
-      }, false)
+      // let fileSize = currentFile.file.size // 文件大小
+      // 针对单个文件进行chunk上传
+      for (var i = 0; i < chunkCount; i++) {
+        const { chunk } = getChunkInfo(currentFile.file, i, chunkSize)
+        let chunkFR = new FileReader()
+        chunkFR.readAsBinaryString(chunk)
+        chunkFR.addEventListener('load', e => {
+          let chunkBolb = e.target.result
+          let chunkMD5 = md5(chunkBolb)
+          this.readingFile = false
+          uploadChunk(currentFile, {chunkMD5, chunk, currentChunk: i, chunkCount}, fileIndex)
+        }, false)
+      }
     })
   }
+  // 更新进度
   const progressFun = () => {
-    // 成功加载了一个文件
-    fileSize = fileSize - chunkCount * chunkSize // 算出最终剩下的所有文件大小
-    progressNum = Math.ceil(successCount / chunkCount * 100)
+    progressNum = Math.ceil(successAllCount / AllChunk * 100)
     progress(progressNum)
   }
-  const uploadFile = () => {
+  // 对分片已经处理完毕的文件进行上传
+  const uploadFile = (currentFile) => {
     let makeFileForm = new FormData()
-    makeFileForm.append('md5', fileMD5)
-    makeFileForm.append('file_name', name)
+    makeFileForm.append('md5', currentFile.fileMD5)
+    makeFileForm.append('file_name', currentFile.name)
     fetch({ // 合并文件
       type: 'post',
       url: fileUrl,
       data: makeFileForm
     }).then(res => {
       progressFun()
-      res.file_name = name
+      res.file_name = currentFile.name
       success && success(res)
+      successAllCount++
     }).catch(e => {
       error && error(e)
     })
   }
-  const uploadChunk = (chunkMD5) => {
-    const { chunk } = getChunkInfo()
+  const uploadChunk = (currentFile, chunkInfo, fileIndex) => {
     let fetchForm = new FormData()
-    fetchForm.append('file_name', name)
-    fetchForm.append('md5', fileMD5)
-    fetchForm.append('data', chunk)
-    fetchForm.append('chunks', chunkCount)
-    fetchForm.append('chunk_index', currentChunk)
-    fetchForm.append('chunk_md5', chunkMD5)
+    fetchForm.append('file_name', currentFile.name)
+    fetchForm.append('md5', currentFile.fileMD5)
+    fetchForm.append('data', chunkInfo.chunk)
+    fetchForm.append('chunks', chunkInfo.chunkCount)
+    fetchForm.append('chunk_index', chunkInfo.currentChunk)
+    fetchForm.append('chunk_md5', chunkInfo.chunkMD5)
     fetch({
       type: 'post',
       url: chunkUrl,
       data: fetchForm
     }).then(res => {
-      successCount++
       progressFun()
-      if (currentChunk < chunkCount - 1) {
-        currentChunk++
-        readChunkMD5()
+      // currentAllChunk++
+      if (chunkInfo.currentChunk < chunkInfo.chunkCount - 1) {
+        successAllCount++
       } else {
         // 当总数大于等于分片个数的时候
-        if (successCount >= chunkCount) {
-          uploadFile()
+        if (chunkInfo.currentChunk >= chunkInfo.chunkCount - 1) {
+          uploadFile(currentFile, fileIndex)
         }
       }
     }).catch((e) => {
