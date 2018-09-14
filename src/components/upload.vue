@@ -4,6 +4,7 @@
     :element-loading-text='loadingText'
     element-loading-spinner="el-icon-loading">
     <el-upload
+    multiple
     class="upload-block"
     drag action=""
     :before-upload="beforeExcelUpload"
@@ -25,22 +26,33 @@ export default {
   data () {
     return {
       uploading: false,
-      loadingText: '上传进度'
+      loadingText: '上传进度',
+      fileList: []
     }
   },
   computed: {
   },
   watch: {
+    fileList (fileList) {
+      this.$nextTick(() =>{
+        this.dealUpload()
+      })
+    }
   },
   methods: {
     // 上传前
     beforeExcelUpload () {
+      console.log('this.fileList', this.fileList)
     },
     // 上传请求
     handleUploadRequest (back) {
+      this.fileList.push(back.file)
+    },
+    // 处理上传文件
+    dealUpload () {
       this.uploading = true
       uploadByPieces({
-        file: back.file,
+        file: this.fileList,
         pieceSize: 5,
         chunkUrl: '输入分片上传的地址',
         fileUrl: '整个文件上传的地址',
