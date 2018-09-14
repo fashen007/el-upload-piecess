@@ -2,20 +2,12 @@
 
 > 结合elemenet-ui 支持分片上传
 
-## Build Setup
+> 暂时不支持安装的方式， 主要是提供思路, 可以复制代码去使用(代码逻辑还可以继续优化)
 
-``` bash
-# install dependencies
-npm install
+### 代码核心在 utils.uploadByPieces 函数
 
-# serve with hot reload at localhost:8080
-npm run dev
+##### readFileMD5 读取文件的md5
+##### readChunkMD5 将读取到的文件进行分片处理
+######  getChunkInfo 获取分片的个数，将分片分解，初始化上传进度等等
+######  uploadChunk 上传分片，并且更新上传进度，并且在分片上传完毕之后，进行整个文件的上传
 
-# build for production with minification
-npm run build
-
-# build for production and view the bundle analyzer report
-npm run build --report
-```
-
-For a detailed explanation on how things work, check out the [guide](http://vuejs-templates.github.io/webpack/) and [docs for vue-loader](http://vuejs.github.io/vue-loader).
